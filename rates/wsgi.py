@@ -1,2 +1,2 @@
-from rates import create_app
+from .rates import create_app
 application = create_app()

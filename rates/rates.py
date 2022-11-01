@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 from psycopg2.extras import DictCursor
 from werkzeug.exceptions import BadRequest
 
-import config
+from . import config
 
 
 def get_db_conn(db_config):

@@ -1,0 +1,63 @@
+name: Docker Images Build
+
+on:
+  push:
+    branches:
+      - master
+      - stage
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+          matrix:
+            package: [rates]
+    steps:
+      # Check out code
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # This is the a separate action that sets up buildx runner
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # So now you can use Actions' own caching!
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      # Log in with on-the-fly generated GITHUB_TOKEN
+      # (repo should be granted write acces to the target package)
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate docker image tag
+        id: setvars
+        run: |
+          DOCKER_IMAGE=ghcr.io/lainiwa/${{ matrix.package }}
+          if [[ "${{github.base_ref}}" == "master" || "${{github.ref}}" == "refs/heads/master" ]]; then
+            TAG=latest
+          elif [[ "${{github.base_ref}}" == "stage" || "${{github.ref}}" == "refs/heads/stage" ]]; then
+            TAG=stage
+          else
+            echo "Unknown branch!"
+            exit 1
+          fi
+          echo "::set-output name=docker_image_with_tag::${DOCKER_IMAGE}:${TAG}"
+
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: ./${{ matrix.package }}
+          push: true
+          tags: ${{ steps.setvars.outputs.docker_image_with_tag }}
+          cache-from: type=registry,ref=${{ steps.setvars.outputs.docker_image_with_tag }}
+          cache-to: type=inline

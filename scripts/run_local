@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -o errexit  # exit on fail
+set -o pipefail # catch errors in pipelines
+set -o nounset  # exit on undeclared variable
+# set -o xtrace    # trace execution
+
+COMPOSE_DOCKER_CLI_BUILD=1 \
+DOCKER_BUILDKIT=1 \
+docker-compose --profile local --env-file .env up \
+  --quiet-pull --force-recreate --build --remove-orphans

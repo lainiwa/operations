@@ -1,3 +1,7 @@
+# ALL MY WRITINGS ARE IN THE [/docs](/docs) folder
+Available at https://rates.xeneta.duckdns.org/
+and https://rates-dev.xeneta.duckdns.org/.
+
 # Xeneta Operations Task
 
 The task is two-fold:

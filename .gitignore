@@ -1,0 +1,11 @@
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# git-secret
+.gitsecret/keys/random_seed
+!*.secret
+.env

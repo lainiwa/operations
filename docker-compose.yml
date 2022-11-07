@@ -1,0 +1,165 @@
+version: "3.7"
+
+x-healthcheck-timings: &default-healthcheck-timings
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+volumes:
+  pgdata:
+  traefik-ssl-certs:
+
+services:
+
+  traefik:
+    image: traefik:latest
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - 80:80      # The HTTP port
+      - 443:443    # The HTTPS port
+      - 8080:8080  # The Web UI (enabled by --api.insecure=true)
+    environment:
+      - DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
+      - WAN_HOSTNAME=${WAN_HOSTNAME}
+    volumes:
+      # Get time from host
+      - /etc/localtime:/etc/localtime:ro
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Letsencrypt folder
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Configuration file
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      # Dynamic configuration files
+      - ./traefik/configurations:/configurations:ro
+      - traefik-ssl-certs:/ssl-certs
+    # command: --api.insecure=true --providers.docker
+    labels:
+      - "traefik.enable=true"
+    depends_on:
+      - duckdns_updater
+    profiles:
+      - cloud
+
+  duckdns_updater:
+    image: alpine:latest
+    restart: on-failure
+    command: >
+      wget -O- 'https://www.duckdns.org/update?domains=xeneta&token=${DUCKDNS_TOKEN}&ip='
+    profiles:
+      - cloud
+
+  postgres:
+    image: postgres:13.5
+    restart: unless-stopped
+    environment:
+      - "POSTGRES_DB=${RATES_DB_NAME}"
+      - "POSTGRES_USER=${RATES_DB_USER}"
+      - "POSTGRES_PASSWORD=${RATES_DB_PASSWORD}"
+      - "PGDATA=/var/lib/postgresql/data/pgdata"
+    volumes:
+      - pgdata:/var/lib/postgresql/data/pgdata
+      - ./db/init.d:/docker-entrypoint-initdb.d:ro
+      # - ./pg/etc/postgresql:/etc/postgresql:ro
+      # - ./pg/etc/postgresql-common/psqlrc:/etc/postgresql-common/psqlrc:ro
+      # - ${HOME}/.psql_history:/root/.psql_history:ro
+      # - "/dev/hugepages:/dev/hugepages"
+    # devices:
+    # cap_add:
+    #   - SYS_ADMIN
+    # ulimits:
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      <<: *default-healthcheck-timings
+      test: pg_isready -U admin -d rates
+    # shm_size: '4gb'
+    # command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
+    profiles:
+      - cloud
+
+  postgres_dev:
+    image: postgres:13.5
+    restart: unless-stopped
+    environment:
+      - "POSTGRES_DB=${DEV_RATES_DB_NAME}"
+      - "POSTGRES_USER=${DEV_RATES_DB_USER}"
+      - "POSTGRES_PASSWORD=${DEV_RATES_DB_PASSWORD}"
+    volumes:
+      - ./db/init.d:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      <<: *default-healthcheck-timings
+      test: pg_isready -U admin -d rates
+    profiles:
+      - cloud
+      - local
+
+  rates_prod:
+    image: ghcr.io/lainiwa/rates:latest
+    restart: unless-stopped
+    scale: 5
+    environment:
+      - RATES_DB_NAME=${RATES_DB_NAME}
+      - RATES_DB_USER=${RATES_DB_USER}
+      - RATES_DB_HOST=${RATES_DB_HOST}
+      - RATES_DB_PASSWORD=${RATES_DB_PASSWORD}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rates_prod.rule=Host(`rates.xeneta.duckdns.org`)"
+      # - "traefik.http.routers.rates.middlewares=auth@file"
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      - postgres
+    profiles:
+      - cloud
+
+  rates_dev:
+    image: ghcr.io/lainiwa/rates:stage
+    restart: unless-stopped
+    scale: 3
+    environment:
+      - RATES_DB_NAME=${DEV_RATES_DB_NAME}
+      - RATES_DB_USER=${DEV_RATES_DB_USER}
+      - RATES_DB_HOST=${DEV_RATES_DB_HOST}
+      - RATES_DB_PASSWORD=${DEV_RATES_DB_PASSWORD}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rates_dev.rule=Host(`rates-dev.xeneta.duckdns.org`)"
+      # - "traefik.http.routers.rates_dev.middlewares=auth@file"
+      - "com.centurylinklabs.watchtower.enable=true"
+    depends_on:
+      - postgres_dev
+    profiles:
+      - cloud
+
+  rates_local:
+    build: ./rates
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - RATES_DB_NAME=${DEV_RATES_DB_NAME}
+      - RATES_DB_USER=${DEV_RATES_DB_USER}
+      - RATES_DB_HOST=${DEV_RATES_DB_HOST}
+      - RATES_DB_PASSWORD=${DEV_RATES_DB_PASSWORD}
+    depends_on:
+      - postgres_dev
+    profiles:
+      - local
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # - "~/.docker/config.json:/config.json:ro"
+    command:
+      - "--interval=60"
+      - "--label-enable"
+      - "--cleanup"
+    profiles:
+      - cloud

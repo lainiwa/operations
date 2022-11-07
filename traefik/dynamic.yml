@@ -1,0 +1,44 @@
+
+tls:
+  # stores:
+  #   default:
+  #     defaultCertificate:
+  #       certFile: /etc/letsencrypt/live/quantorme.dnsabr.com/fullchain.pem
+  #       keyFile: /etc/letsencrypt/live/quantorme.dnsabr.com/privkey.pem
+
+  # certificates:
+  #   - certFile: /etc/letsencrypt/live/quantorme.dnsabr.com/fullchain.pem
+  #     keyFile: /etc/letsencrypt/live/quantorme.dnsabr.com/privkey.pem
+    # - certFile: /etc/letsencrypt/live/quantor.me/fullchain.pem
+    #   keyFile: /etc/letsencrypt/live/quantor.me/privkey.pem
+
+
+# routers:
+#   http-catchall:
+#     rule: HostRegexp(`{host:.+}`)
+#     entrypoints:
+#       - web
+#     middlewares:
+#       - redirect-to-https
+
+
+# middlewares:
+#   redirect-to-https:
+#     redirectScheme:
+#       scheme: https
+
+
+http:
+  routers:
+    dashboard:
+      rule: |
+        Host(`traefik.{{env "WAN_HOSTNAME"}}`)
+      service: api@internal
+      middlewares:
+        - auth
+
+  middlewares:
+    auth:
+      basicAuth:
+        users:
+          - 'admin:$apr1$ehrR3I2C$G6uf4LxRjs7aMslTmJO6v0'  # htpasswd -nb admin tCWP0Mva55qSxtRAxo25

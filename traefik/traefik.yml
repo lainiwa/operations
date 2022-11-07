@@ -1,0 +1,169 @@
+
+################################################################
+# Logs
+################################################################
+log:
+  # Options: FATAL, PANIC, ERROR, WARN, INFO, DEBUG.
+  # Default: ERROR.
+  level: INFO
+
+
+################################################################
+# Global configuration
+################################################################
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false  # true by default
+
+
+################################################################
+# EntryPoints configuration
+################################################################
+entryPoints:
+  # dashboard:
+  #   address: ':8080'
+  #   auth:
+  #     basic:
+  #       users:
+  #         - 'admin:$apr1$uEWv1A56$uhIcaaRwfvjQSLBdviDkT0'  # secure_password
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+    http:
+      # middlewares:
+      #   - secureHeaders@file
+      tls:
+        certResolver: duckresolver
+        domains:
+          - main: "xeneta.duckdns.org"
+            sans:
+              - "*.xeneta.duckdns.org"
+  metrics:
+    address: ":8082"
+
+
+################################################################
+# Metrics
+################################################################
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    entryPoint: metrics
+
+
+################################################################
+# API and dashboard configuration
+################################################################
+api:
+  debug: true
+  # Enable the API in insecure mode
+  # Default: false
+  insecure: false  # http://xeneta.duckdns.org:8080/dashboard/
+  # Enabled Dashboard
+  # Default: true
+  dashboard: true
+
+
+# ################################################################
+# # Ping configuration
+# ################################################################
+# ping:
+#   # Name of the related entry point
+#   # Default: "traefik"
+#   entryPoint: traefik
+
+
+################################################################
+# Docker configuration backend
+################################################################
+providers:
+  # Wait for some time before applying changes.
+  # Default: 2s
+  providersThrottleDuration: 2s
+  # Enable Docker configuration backend
+  docker:
+    # Docker server endpoint. Can be a tcp or a unix socket endpoint.
+    # Default: "unix:///var/run/docker.sock"
+    endpoint: "unix:///var/run/docker.sock"
+    # endpoint: "tcp://docker_socket_proxy:2375"
+    # Expose containers by default in traefik
+    # Default: true
+    exposedByDefault: false
+    # Default host rule.
+    # Default: "Host(`{{ normalize .Name }}`)"
+    # https://doc.traefik.io/traefik/providers/docker/#defaultrule
+    # https://community.traefik.io/t/defaultrule-to-get-the-service-name-without-the-stack/1847
+    defaultRule: |
+      Host(`{{
+      if index .Labels "com.docker.compose.service" }}{{
+        index .Labels "com.docker.compose.service" }}.{{env "WAN_HOSTNAME"}}{{
+      else if index .Labels "com.docker.stack.namespace" }}{{
+        .Name | trimPrefix (index .Labels "com.docker.stack.namespace") | trimPrefix "-" }}.{{env "WAN_HOSTNAME"}}{{
+      else }}{{
+        trimPrefix `/` .Name }}.{{env "WAN_HOSTNAME"}}`,`{{
+      end }}`)
+    # Enables the Swarm Mode (instead of standalone Docker).
+    # Default: false
+    swarmMode: false
+    # Watch Docker events.
+    # Default: true
+    watch: true
+  # Enable the file provider to define routers / middlewares / services in file
+  file:
+    # filename: /configurations/dynamic.yml
+    directory: /configurations
+    watch: true
+  # file:
+  #   directory: /etc/letsencrypt
+  #   watch: true
+
+
+certificatesResolvers:
+  duckresolver:
+    acme:
+      # ...
+      caServer: "https://acme-v02.api.letsencrypt.org/directory"
+      storage: /ssl-certs/acme.duck.json
+      dnsChallenge:
+        provider: duckdns
+        delayBeforeCheck: 0
+    # ...
+
+  hetznerresolver:
+    acme:
+      # ...
+      caServer: "https://acme-v02.api.letsencrypt.org/directory"
+      storage: /ssl-certs/acme.hetzner.json
+      dnsChallenge:
+        provider: hetzner
+        delayBeforeCheck: 40
+    # ...
+
+  # staging:
+  #   acme:
+  #     email: kirrik96@gmail.com
+  #     storage: /ssl-certs/acme.json
+  #     # The CA server to use
+  #     # Required, Default="https://acme-v02.api.letsencrypt.org/directory"
+  #     caServer: "https://acme-staging-v02.api.letsencrypt.org/directory"
+  #     # Location where your ACME certificates are saved to
+  #     # Required, Default="acme.json"
+  #     storage: acme.json
+  #     httpChallenge:
+  #       entryPoint: web
+
+  # production:
+  #   acme:
+  #     email: kirrik96@gmail.com
+  #     storage: /ssl-certs/acme.json
+  #     caServer: "https://acme-v02.api.letsencrypt.org/directory"
+  #     httpChallenge:
+  #       entryPoint: web
